@@ -179,6 +179,10 @@ import { createUser, verifyPassword, login, verifyToken } from '../services/auth
 import { userRepo } from '../repositories/userRepo';
 import { fixedClock } from '../lib/clock';
 
+beforeEach(async () => {
+  await userRepo.seed([await createUser('alice', 'secret123')]);
+});
+
 describe('password hashing', () => {
   it('verifies the correct password and rejects a wrong one', async () => {
     const user = await createUser('alice', 'secret123');
@@ -188,10 +192,6 @@ describe('password hashing', () => {
 });
 
 describe('login', () => {
-  beforeEach(async () => {
-    await userRepo.seed([await createUser('alice', 'secret123')]);
-  });
-
   it('returns a token for correct credentials', async () => {
     const result = await login('alice', 'secret123');
     expect(result.token).toEqual(expect.any(String));
@@ -208,10 +208,6 @@ describe('login', () => {
 });
 
 describe('verifyToken', () => {
-  beforeEach(async () => {
-    await userRepo.seed([await createUser('alice', 'secret123')]);
-  });
-
   it('returns the username for a valid, unexpired token', async () => {
     const clock = fixedClock('2026-01-01T00:00:00.000Z');
     const { token } = await login('alice', 'secret123', clock);
