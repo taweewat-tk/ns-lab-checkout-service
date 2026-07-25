@@ -37,3 +37,9 @@ export interface Order {
   couponCode: string | null;
   createdAt: string;
 }
+
+export interface User {
+  username: string;
+  passwordSalt: string;
+  passwordHash: string;
+}
