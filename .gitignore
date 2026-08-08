@@ -4,3 +4,8 @@ dist/
 coverage/
 .claude/settings.local.json
 .superpowers/
+.DS_Store
+report.json
+headless/
+headless-solution/
+.claude/worktrees/
