@@ -58,3 +58,18 @@ export async function available(sku: string): Promise<number> {
   const product = await productRepo.get(sku);
   return product?.stock ?? 0;
 }
+
+/**
+ * Availability for several SKUs at once, as a `sku -> quantity` map.
+ * Unknown SKUs resolve to 0 rather than throwing (unlike reserve/release),
+ * so a caller can ask about a whole cart without pre-validating it.
+ * Delegates to `available` per SKU — no separate stock-reading logic here.
+ *
+ * @param skus - Product SKUs to look up.
+ * @returns Map of each requested SKU to its current stock quantity
+ *   (`0` for SKUs that do not exist).
+ */
+export async function availableMany(skus: string[]): Promise<Record<string, number>> {
+  const entries = await Promise.all(skus.map(async (sku) => [sku, await available(sku)] as const));
+  return Object.fromEntries(entries);
+}
