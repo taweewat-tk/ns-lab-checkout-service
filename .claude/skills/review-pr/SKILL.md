@@ -16,12 +16,8 @@ effort: xhigh
 3. เปิดไฟล์ที่ถูกแก้แบบเต็มด้วย `Read`/`Grep`/`Glob` เพื่อดูบริบทรอบ ๆ ที่ diff ไม่แสดง — ห้ามรีวิวจาก diff เพียว ๆ
 4. ตรวจ 4 แกน:
    - **ความถูกต้อง** — bug ชัดเจน, edge case, race condition, ลำดับการทำงานผิด
-   - **Convention ของ repo** — อ้างอิง `CLAUDE.md` โดยตรง เช่น เงินต้องเป็น integer cents ผ่าน `src/lib/money.ts`, concurrency ต้องผ่าน `withLock` ใน `src/lib/locks.ts`, services โยน plain `Error` เท่านั้น, และ "การแก้ต้องเล็กที่สุดเท่าที่ทำให้ spec เป็นจริง" — พร้อมเช็คทีละข้อตาม `docs/review-checklist.md`:
-     1. เงินเป็น integer cents เสมอ — ห้าม float ในการคำนวณราคา
-     2. ทุก endpoint ใหม่ต้องมีเทสต์อย่างน้อย happy path + 1 edge case
-     3. ห้าม `forEach(async ...)` — ใช้ `for..of` หรือ `Promise.all`
-     4. error ต้องมี message ที่ actionable ไม่กลืน exception เงียบ ๆ
-     5. ห้าม secret/credential ใด ๆ อยู่ในดิฟฟ์
+   - **Convention ของ repo** — อ้างอิง `CLAUDE.md` โดยตรง เช่น เงินต้องเป็น integer cents ผ่าน `src/lib/money.ts`, concurrency ต้องผ่าน `withLock` ใน `src/lib/locks.ts`, services โยน plain `Error` เท่านั้น, และ "การแก้ต้องเล็กที่สุดเท่าที่ทำให้ spec เป็นจริง"
+     **Read `docs/review-checklist.md` ก่อนรีวิวเสมอ** แล้วไล่เช็คตามทุกหมวดในไฟล์นั้นทีละข้อ (🔴 Blocking / 🟡 Should fix / 🔵 Nit) ห้ามใช้เกณฑ์จากความจำ ให้ยึดไฟล์ ณ ตอนรันเป็นฉบับจริงเสมอ
    - **ความปลอดภัย** — secret/token หลุดใน diff, input ที่ไม่ได้ validate
    - **เทสต์** — มีเทสต์ครอบการเปลี่ยนแปลงไหม ตรงกับเกณฑ์ผ่านใน `docs/ASSIGNMENTS.md` ไหม
 5. เช็คสถานะ CI: `gh pr checks $1` (ถ้า repo ไม่มี workflow ให้ข้ามข้อนี้ไปเงียบ ๆ ไม่ต้องรายงานเป็นปัญหา)
