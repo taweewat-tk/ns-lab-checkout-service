@@ -15,6 +15,10 @@ export function createAsyncStore<T>(key: (item: T) => string) {
       await tick();
       return map.get(id);
     },
+    async has(id: string): Promise<boolean> {
+      await tick();
+      return map.has(id);
+    },
     async put(item: T): Promise<T> {
       await tick();
       map.set(key(item), item);
