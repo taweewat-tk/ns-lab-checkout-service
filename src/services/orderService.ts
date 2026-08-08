@@ -1,3 +1,8 @@
+/**
+ * @generated-docs
+ * JSDoc in this file was added by an automated documentation pass.
+ * No behavioral logic was changed.
+ */
 import { randomUUID } from 'crypto';
 import { CartLine, Order } from '../types';
 import { computeSubtotal, priceCart } from './pricingService';
@@ -23,7 +28,7 @@ const idempotencyStore = createAsyncStore<IdempotencyRecord>((r) => r.key);
 
 async function doCheckout(input: CheckoutInput): Promise<Order> {
   // 1) Resolve the coupon (unknown / missing code -> no discount).
-  const coupon = input.couponCode ? (await couponRepo.get(input.couponCode)) ?? null : null;
+  const coupon = input.couponCode ? ((await couponRepo.get(input.couponCode)) ?? null) : null;
 
   // 2) Price the cart with the coupon's discount.
   const subtotal = await computeSubtotal(input.lines);
@@ -59,6 +64,14 @@ async function doCheckout(input: CheckoutInput): Promise<Order> {
  * Idempotency: when an Idempotency-Key is supplied, the whole operation is
  * serialized per key, and a key that already completed returns the ORIGINAL
  * order without touching stock again — safe retries, even concurrent ones.
+ *
+ * @param input - Cart lines to purchase, plus an optional coupon code and
+ *   optional idempotency key.
+ * @returns The created order, or (for a repeated idempotency key) the
+ *   original order from the first successful attempt.
+ * @throws {Error} If any line's stock cannot be reserved. Lines already
+ *   reserved earlier in the same call are released before the error is
+ *   thrown, so a failed checkout doesn't leak reserved stock.
  */
 export async function checkout(input: CheckoutInput): Promise<Order> {
   if (!input.idempotencyKey) return doCheckout(input);

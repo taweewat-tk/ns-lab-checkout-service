@@ -1,3 +1,7 @@
+/**
+ * @generated-docs
+ * JSDoc comments in this file were generated automatically; no logic was changed.
+ */
 import { randomBytes, scrypt, timingSafeEqual } from 'crypto';
 import { promisify } from 'util';
 import { User } from '../types';
@@ -11,12 +15,26 @@ const scryptAsync = promisify(scrypt) as unknown as (
   keylen: number,
 ) => Promise<Buffer>;
 
+/**
+ * Hashes a plaintext password with a freshly generated random salt using scrypt.
+ *
+ * @param password - The plaintext password to hash.
+ * @returns The hex-encoded salt and the resulting hex-encoded hash.
+ */
 export async function hashPassword(password: string): Promise<{ salt: string; hash: string }> {
   const salt = randomBytes(16).toString('hex');
   const derived = await scryptAsync(password, salt, 64);
   return { salt, hash: derived.toString('hex') };
 }
 
+/**
+ * Verifies a plaintext password against a user's stored salt and hash using a
+ * timing-safe comparison.
+ *
+ * @param password - The plaintext password to verify.
+ * @param user - The user record containing `passwordSalt` and `passwordHash`.
+ * @returns `true` if the password matches, `false` otherwise.
+ */
 export async function verifyPassword(password: string, user: User): Promise<boolean> {
   const derived = await scryptAsync(password, user.passwordSalt, 64);
   const stored = Buffer.from(user.passwordHash, 'hex');
@@ -24,6 +42,13 @@ export async function verifyPassword(password: string, user: User): Promise<bool
   return timingSafeEqual(derived, stored);
 }
 
+/**
+ * Builds a new `User` record by hashing the given password.
+ *
+ * @param username - The username for the new user.
+ * @param password - The plaintext password to hash and store.
+ * @returns A `User` object containing the username, password salt, and password hash.
+ */
 export async function createUser(username: string, password: string): Promise<User> {
   const { salt, hash } = await hashPassword(password);
   return { username, passwordSalt: salt, passwordHash: hash };
@@ -41,6 +66,15 @@ export interface LoginResult {
   expiresAt: string;
 }
 
+/**
+ * Authenticates a user by username and password, issuing a signed JWT on success.
+ *
+ * @param username - The username to look up.
+ * @param password - The plaintext password to verify.
+ * @param clock - Injectable clock used to compute issue/expiry times (defaults to `systemClock`).
+ * @returns The signed token and its ISO 8601 expiry timestamp.
+ * @throws {Error} If the user does not exist or the password is invalid ('invalid credentials').
+ */
 export async function login(
   username: string,
   password: string,
@@ -58,6 +92,15 @@ export async function login(
   return { token, expiresAt: new Date(expSeconds * 1000).toISOString() };
 }
 
+/**
+ * Verifies a JWT and extracts the subject (username) from its payload.
+ *
+ * @param token - The JWT to verify.
+ * @param clock - Injectable clock used to evaluate expiry (defaults to `systemClock`).
+ * @returns The `sub` claim (username) from the verified token payload.
+ * @throws {Error} If the token is invalid, expired, or missing a string `sub` claim
+ * ('invalid or expired token').
+ */
 export function verifyToken(token: string, clock: Clock = systemClock): string {
   const nowSeconds = Math.floor(clock.now().getTime() / 1000);
   let payload: unknown;
