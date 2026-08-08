@@ -1,4 +1,4 @@
-import { toCents, formatCents, percentOf, addCents } from '../lib/money';
+import { toCents, formatCents, percentOf, addCents, subtractCents } from '../lib/money';
 
 describe('money', () => {
   it('toCents rounds to integer cents', () => {
@@ -20,5 +20,17 @@ describe('money', () => {
 
   it('addCents sums', () => {
     expect(addCents(100, 200, 50)).toBe(350);
+  });
+
+  it('subtractCents subtracts normally', () => {
+    expect(subtractCents(1712, 500)).toBe(1212);
+  });
+
+  it('subtractCents clamps to 0 when b > a', () => {
+    expect(subtractCents(500, 1712)).toBe(0);
+  });
+
+  it('subtractCents returns 0 when a equals b', () => {
+    expect(subtractCents(500, 500)).toBe(0);
   });
 });
