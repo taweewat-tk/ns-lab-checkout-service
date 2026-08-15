@@ -1,0 +1,32 @@
+name: Coverage gate
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    env:
+      MIN_COVERAGE: '85'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+      - run: npm run test:cov
+
+      - name: บังคับเพดานขั้นต่ำของ statement coverage
+        run: |
+          pct=$(jq -r '.total.statements.pct' coverage/coverage-summary.json)
+          echo "statement coverage: ${pct}% (ขั้นต่ำ ${MIN_COVERAGE}%)"
+          awk -v p="$pct" -v m="$MIN_COVERAGE" 'BEGIN { exit !(p + 0 >= m + 0) }' || {
+            echo "::error::coverage ${pct}% ต่ำกว่าเกณฑ์ ${MIN_COVERAGE}%"
+            exit 1
+          }

@@ -1,0 +1,57 @@
+name: Claude review
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+# ไม่มีเพดานค่าใช้จ่ายต่อรอบแล้ว จึงกันไม่ให้ push รัว ๆ จุดรีวิวซ้อนกันหลายรอบพร้อมกัน
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+      - run: npm test
+
+      - name: ติดตั้ง Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: ให้ Claude รีวิว diff ของ PR
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          git diff origin/${{ github.base_ref }}...HEAD > /tmp/pr.diff
+
+          # diff ไปทาง stdin ไม่ใช่ argv: argv หนึ่งตัวบน Linux จำกัดที่ 128 KB
+          # (MAX_ARG_STRLEN) ซึ่ง diff จริงของ repo นี้ทะลุไปแล้ว การยัดผ่าน
+          # $(cat ...) จึงตายด้วย "Argument list too long" ก่อนถึงมือโมเดลด้วยซ้ำ
+          claude -p "รีวิว diff ที่ส่งมาทาง stdin ตาม docs/review-checklist.md ตอบเป็นรายการ พร้อมระบุไฟล์:บรรทัด และระดับความรุนแรง ห้ามตอบ LGTM เปล่า ๆ" \
+            --output-format json < /tmp/pr.diff > /tmp/review.json
+
+          # ไม่มีเพดานงบคอยทำให้ job แดงแทนแล้ว ถ้ารีวิวไม่ออกผลต้องดักเอง
+          # ไม่งั้นคำว่า "null" จะถูกโพสต์ลง PR เหมือนเป็นผลรีวิวจริง
+          jq -e '(.result // "") | length > 0' /tmp/review.json > /dev/null \
+            || { echo "::error::claude ไม่คืนผลรีวิว (.result ว่างหรือ null)"; exit 1; }
+
+          jq -r '.result' /tmp/review.json > /tmp/review.md
+          jq -r '"\n---\nค่าใช้จ่ายรอบนี้: $" + (.total_cost_usd|tostring)' /tmp/review.json >> /tmp/review.md
+
+      - name: คอมเมนต์ผลรีวิวลง PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr comment ${{ github.event.number }} --body-file /tmp/review.md

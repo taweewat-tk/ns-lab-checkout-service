@@ -1,0 +1,76 @@
+name: Security gate
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+# ไม่มีเพดานค่าใช้จ่ายต่อรอบแล้ว จึงกันไม่ให้ push รัว ๆ จุดสแกนซ้อนกันหลายรอบพร้อมกัน
+concurrency:
+  group: security-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      - name: ติดตั้ง Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Security review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -o pipefail
+
+          # Fail closed if the model invocation itself errors (network, auth, etc.)
+          if ! claude -p "ตรวจความปลอดภัยของ repo นี้ รายงานเฉพาะของที่ยืนยันได้ ขึ้นต้นแต่ละข้อด้วย CRITICAL/HIGH/MEDIUM/LOW แล้วตามด้วยไฟล์:บรรทัด" \
+            --output-format json > /tmp/security.json; then
+            echo "::error::claude -p invocation failed (non-zero exit) — failing the security gate closed"
+            # ข้อความข้างบนไม่บอกว่าพังเพราะอะไร สาเหตุจริงอยู่ใน JSON ที่ claude
+            # เขียนไว้ก่อนตาย (subtype / errors) — พิมพ์ออกมาให้ debug ได้จาก log เลย
+            echo "--- /tmp/security.json ---"
+            jq -r '{subtype, terminal_reason, errors, total_cost_usd, num_turns}' /tmp/security.json 2>/dev/null \
+              || head -c 2000 /tmp/security.json
+            exit 1
+          fi
+
+          # Fail closed if the output is not valid JSON
+          if ! jq -e 'type == "object"' /tmp/security.json > /dev/null 2>&1; then
+            echo "::error::/tmp/security.json is not valid JSON — failing the security gate closed"
+            exit 1
+          fi
+
+          # Fail closed if .result is missing, null, empty, or whitespace-only — the review did not really run
+          result=$(jq -r '.result // empty' /tmp/security.json)
+          trimmed="$(printf '%s' "$result" | tr -d '[:space:]')"
+          if [ -z "$result" ] || [ "$result" = "null" ] || [ -z "$trimmed" ]; then
+            echo "::error::security review produced no usable .result (empty, null, or whitespace-only) — failing the security gate closed"
+            exit 1
+          fi
+
+          printf '%s\n' "$result" | tee /tmp/security.md
+
+      - name: บล็อกเมื่อเจอ HIGH หรือ CRITICAL
+        run: |
+          [ -s /tmp/security.md ] || { echo "::error::ไม่มีผลรีวิว"; exit 1; }
+
+          # โมเดลตอบเป็น markdown จึงต้องยอมให้มี bullet / ตัวเลข / ** / indent นำหน้าระดับความรุนแรง
+          pat='^[[:space:]]*([-*]|[0-9]+[.)])?[[:space:]]*\**(HIGH|CRITICAL)\b'
+
+          if grep -qE "$pat" /tmp/security.md; then
+            grep -E "$pat" /tmp/security.md
+            echo "::error::security review พบช่องโหว่ระดับ HIGH ขึ้นไป — merge ไม่ได้"
+            exit 1
+          fi
+          echo "ไม่พบช่องโหว่ระดับ HIGH ขึ้นไป"
