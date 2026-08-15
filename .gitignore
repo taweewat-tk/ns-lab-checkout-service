@@ -1,6 +1,12 @@
 node_modules/
 dist/
 *.log
+
+# ค่า config จริงต้องไม่เข้ารีโป — คอมมิตเทมเพลต .env.example แทน
+.env
+.env.*
+!.env.example
+
 coverage/
 .claude/settings.local.json
 .superpowers/
