@@ -10,13 +10,20 @@ beforeEach(async () => {
 
 describe('checkout', () => {
   it('prices, reserves stock and persists the order', async () => {
-    const order = await checkout({ lines: [{ sku: 'BOOK', quantity: 2 }] });
-    expect(order.breakdown).toEqual({ subtotalCents: 3000, discountCents: 0, taxCents: 210, totalCents: 3210 });
+    const order = await checkout({ username: 'alice', lines: [{ sku: 'BOOK', quantity: 2 }] });
+    expect(order.breakdown).toEqual({
+      subtotalCents: 3000,
+      discountCents: 0,
+      taxCents: 210,
+      totalCents: 3210,
+    });
     expect(await available('BOOK')).toBe(3);
     expect(await orderRepo.get(order.id)).toBeTruthy();
   });
 
   it('rejects when stock is insufficient', async () => {
-    await expect(checkout({ lines: [{ sku: 'BOOK', quantity: 99 }] })).rejects.toThrow(/insufficient/);
+    await expect(
+      checkout({ username: 'alice', lines: [{ sku: 'BOOK', quantity: 99 }] }),
+    ).rejects.toThrow(/insufficient/);
   });
 });

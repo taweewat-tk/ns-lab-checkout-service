@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { login, verifyToken } from '../services/authService';
+import { login } from '../services/authService';
 import { rateLimit } from '../middleware/rateLimit';
+import { requireAuth, authedUsername } from '../middleware/requireAuth';
 
 export const authRouter = Router();
 
@@ -14,6 +15,7 @@ const loginLimiter = rateLimit({
   windowMs: 60_000,
   max: 5,
   keyOf: (req) => `${req.ip ?? 'unknown'}:${String(req.body?.username ?? '')}`,
+  resetOnSuccess: true,
 });
 
 authRouter.post('/login', loginLimiter, async (req: Request, res: Response, next: NextFunction) => {
@@ -31,17 +33,6 @@ authRouter.post('/login', loginLimiter, async (req: Request, res: Response, next
   }
 });
 
-authRouter.get('/me', (req: Request, res: Response) => {
-  const header = req.header('Authorization') ?? '';
-  const [scheme, token] = header.split(' ');
-  if (scheme !== 'Bearer' || !token) {
-    res.status(401).json({ error: 'invalid or expired token' });
-    return;
-  }
-  try {
-    const username = verifyToken(token);
-    res.status(200).json({ username });
-  } catch {
-    res.status(401).json({ error: 'invalid or expired token' });
-  }
+authRouter.get('/me', requireAuth, (req: Request, res: Response) => {
+  res.status(200).json({ username: authedUsername(req) });
 });

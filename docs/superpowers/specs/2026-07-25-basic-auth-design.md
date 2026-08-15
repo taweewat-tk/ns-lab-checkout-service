@@ -21,6 +21,20 @@ repo นี้เป็น checkout service ที่ไม่มีโค้ด
 
 **สิ่งที่จงใจไม่ทำ (YAGNI):** register, logout/revoke, refresh token, role/permission, rate limiting, การป้องกัน route เดิม (`/orders`, `/products` ยังเรียกได้โดยไม่ต้องมี token)
 
+> **อัปเดต 2026-08-15 — ข้อ YAGNI บางส่วนถูกกลับมติแล้ว**
+>
+> ผลรีวิวความปลอดภัยชี้ว่าการเปิด `POST /orders/checkout` ให้เรียกแบบไม่ระบุตัวตนคือ denial-of-inventory (ยิง reserve จนสต็อกหมดได้ เช่น MUG มี 4 ชิ้น) และ order forgery จึงเปลี่ยนการตัดสินใจดังนี้:
+>
+> | เดิม | ตอนนี้ |
+> |------|--------|
+> | ไม่มี rate limiting | `POST /auth/login` 5 ครั้ง/นาที ต่อ `ip:username` · `POST /orders/checkout` 10 ครั้ง/นาที ต่อ user (`src/middleware/rateLimit.ts`) |
+> | `/orders` เรียกได้โดยไม่ต้องมี token | `POST /orders/checkout` ต้องมี `Authorization: Bearer` (`src/middleware/requireAuth.ts`) |
+> | secret fallback `'dev-only-secret'` | ไม่มี literal ใน source แล้ว — สุ่ม secret ต่อ process ถ้าไม่ได้ตั้ง `JWT_SECRET`, production ยัง throw |
+>
+> ผลข้างเคียงต่อ domain model: `Order` มี `username` และ idempotency key ถูก scope เป็น `${username}:${key}` เพื่อกันไม่ให้ user หนึ่งเรียก order ของอีกคนกลับมาด้วยการส่ง key ซ้ำ
+>
+> `GET /products` **ยังเปิดสาธารณะ** ตามเดิม (เป็น catalog อ่านอย่างเดียว) — ข้อนี้ไม่ถูกกลับมติ
+
 ## ประเด็นที่ต้องจัดการเป็นพิเศษ
 
 ### 1. `errorHandler` แปลงทุก error เป็น 400 — แต่ login ที่ผิดควรได้ 401

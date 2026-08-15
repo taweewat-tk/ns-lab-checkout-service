@@ -12,6 +12,13 @@ export interface RateLimitOptions {
   windowMs: number;
   max: number;
   keyOf: (req: Request) => string;
+  /**
+   * Clear the bucket when a request succeeds. Right for credential checks,
+   * where a legitimate user shouldn't stay penalised for earlier typos; wrong
+   * wherever the successful calls are themselves what needs capping, since
+   * every success would reset the window.
+   */
+  resetOnSuccess?: boolean;
 }
 
 interface Bucket {
@@ -49,11 +56,11 @@ export function rateLimit(opts: RateLimitOptions): RequestHandler {
     }
 
     bucket.count += 1;
-    // A successful response clears the bucket, so a legitimate user is never
-    // locked out by earlier failed attempts from the same key.
-    res.on('finish', () => {
-      if (res.statusCode < 400) buckets.delete(key);
-    });
+    if (opts.resetOnSuccess) {
+      res.on('finish', () => {
+        if (res.statusCode < 400) buckets.delete(key);
+      });
+    }
 
     next();
   };

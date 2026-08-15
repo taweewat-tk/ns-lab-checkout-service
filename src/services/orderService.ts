@@ -15,6 +15,8 @@ import { withLock } from '../lib/locks';
 
 export interface CheckoutInput {
   lines: CartLine[];
+  /** Authenticated buyer. Owns the resulting order and scopes its idempotency key. */
+  username: string;
   couponCode?: string | null;
   idempotencyKey?: string;
 }
@@ -49,6 +51,7 @@ async function doCheckout(input: CheckoutInput): Promise<Order> {
   // 4) Persist.
   const order: Order = {
     id: randomUUID(),
+    username: input.username,
     lines: input.lines,
     breakdown,
     couponCode: coupon?.code ?? null,
@@ -64,9 +67,10 @@ async function doCheckout(input: CheckoutInput): Promise<Order> {
  * Idempotency: when an Idempotency-Key is supplied, the whole operation is
  * serialized per key, and a key that already completed returns the ORIGINAL
  * order without touching stock again — safe retries, even concurrent ones.
+ * Keys are scoped per user, so the same key from two users is two orders.
  *
- * @param input - Cart lines to purchase, plus an optional coupon code and
- *   optional idempotency key.
+ * @param input - Cart lines to purchase and the authenticated buyer, plus an
+ *   optional coupon code and optional idempotency key.
  * @returns The created order, or (for a repeated idempotency key) the
  *   original order from the first successful attempt.
  * @throws {Error} If any line's stock cannot be reserved. Lines already
@@ -76,7 +80,10 @@ async function doCheckout(input: CheckoutInput): Promise<Order> {
 export async function checkout(input: CheckoutInput): Promise<Order> {
   if (!input.idempotencyKey) return doCheckout(input);
 
-  const key = input.idempotencyKey;
+  // Scope the key to its owner: a bare key is caller-supplied, so a global
+  // namespace would let anyone replay someone else's key and read back their
+  // order — lines, totals and all.
+  const key = `${input.username}:${input.idempotencyKey}`;
   return withLock(`idem:${key}`, async () => {
     const existing = await idempotencyStore.get(key);
     if (existing) {

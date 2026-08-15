@@ -32,6 +32,8 @@ export interface PriceBreakdown {
 
 export interface Order {
   id: string;
+  /** Username of the authenticated buyer the order belongs to. */
+  username: string;
   lines: CartLine[];
   breakdown: PriceBreakdown;
   couponCode: string | null;
