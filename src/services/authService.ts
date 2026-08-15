@@ -54,12 +54,29 @@ export async function createUser(username: string, password: string): Promise<Us
   return { username, passwordSalt: salt, passwordHash: hash };
 }
 
-const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-only-secret';
-if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
-  throw new Error('JWT_SECRET must be set in production');
+// Never fall back to a literal: a secret in source is a secret an attacker has.
+// Without JWT_SECRET the process signs with a random key nobody can predict —
+// tokens simply don't survive a restart.
+const JWT_SECRET: string = process.env.JWT_SECRET ?? randomBytes(32).toString('hex');
+if (!process.env.JWT_SECRET) {
+  // Production still fails closed: with more than one instance an ephemeral
+  // key would make tokens fail across instances at random.
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET must be set in production');
+  }
+  console.warn(
+    '[auth] JWT_SECRET is not set — signing with an ephemeral random secret; tokens will not survive a restart',
+  );
 }
 
+// Pin the algorithm on both sides so a verifier can never be talked into
+// accepting something weaker than what we sign with.
+const JWT_ALGORITHM = 'HS256' as const;
+
 const TOKEN_TTL_SECONDS = 60 * 60;
+
+// Salt for the decoy hash below. Value is irrelevant — only the work matters.
+const ABSENT_USER_SALT = randomBytes(16).toString('hex');
 
 export interface LoginResult {
   token: string;
@@ -81,14 +98,21 @@ export async function login(
   clock: Clock = systemClock,
 ): Promise<LoginResult> {
   const user = await userRepo.get(username);
-  if (!user) throw new Error('invalid credentials');
+  if (!user) {
+    // Burn the same scrypt cost as the found-user path; returning early here
+    // would leak which usernames exist through response timing.
+    await scryptAsync(password, ABSENT_USER_SALT, 64);
+    throw new Error('invalid credentials');
+  }
 
   const ok = await verifyPassword(password, user);
   if (!ok) throw new Error('invalid credentials');
 
   const nowSeconds = Math.floor(clock.now().getTime() / 1000);
   const expSeconds = nowSeconds + TOKEN_TTL_SECONDS;
-  const token = jwt.sign({ sub: user.username, exp: expSeconds }, JWT_SECRET);
+  const token = jwt.sign({ sub: user.username, exp: expSeconds }, JWT_SECRET, {
+    algorithm: JWT_ALGORITHM,
+  });
   return { token, expiresAt: new Date(expSeconds * 1000).toISOString() };
 }
 
@@ -105,7 +129,10 @@ export function verifyToken(token: string, clock: Clock = systemClock): string {
   const nowSeconds = Math.floor(clock.now().getTime() / 1000);
   let payload: unknown;
   try {
-    payload = jwt.verify(token, JWT_SECRET, { clockTimestamp: nowSeconds });
+    payload = jwt.verify(token, JWT_SECRET, {
+      algorithms: [JWT_ALGORITHM],
+      clockTimestamp: nowSeconds,
+    });
   } catch {
     throw new Error('invalid or expired token');
   }
