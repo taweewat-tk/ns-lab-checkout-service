@@ -54,7 +54,13 @@ jobs:
 
       - name: บล็อกเมื่อเจอ HIGH หรือ CRITICAL
         run: |
-          if grep -qE '^(HIGH|CRITICAL)' /tmp/security.md; then
+          [ -s /tmp/security.md ] || { echo "::error::ไม่มีผลรีวิว"; exit 1; }
+
+          # โมเดลตอบเป็น markdown จึงต้องยอมให้มี bullet / ตัวเลข / ** / indent นำหน้าระดับความรุนแรง
+          pat='^[[:space:]]*([-*]|[0-9]+[.)])?[[:space:]]*\**(HIGH|CRITICAL)\b'
+
+          if grep -qE "$pat" /tmp/security.md; then
+            grep -E "$pat" /tmp/security.md
             echo "::error::security review พบช่องโหว่ระดับ HIGH ขึ้นไป — merge ไม่ได้"
             exit 1
           fi
