@@ -1,0 +1,61 @@
+name: Security gate
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      - name: ติดตั้ง Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Security review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -o pipefail
+
+          # Fail closed if the model invocation itself errors (network, auth, budget, etc.)
+          if ! claude -p "ตรวจความปลอดภัยของ repo นี้ รายงานเฉพาะของที่ยืนยันได้ ขึ้นต้นแต่ละข้อด้วย CRITICAL/HIGH/MEDIUM/LOW แล้วตามด้วยไฟล์:บรรทัด" \
+            --output-format json \
+            --max-budget-usd 0.50 > /tmp/security.json; then
+            echo "::error::claude -p invocation failed (non-zero exit) — failing the security gate closed"
+            exit 1
+          fi
+
+          # Fail closed if the output is not valid JSON
+          if ! jq -e 'type == "object"' /tmp/security.json > /dev/null 2>&1; then
+            echo "::error::/tmp/security.json is not valid JSON — failing the security gate closed"
+            exit 1
+          fi
+
+          # Fail closed if .result is missing, null, empty, or whitespace-only — the review did not really run
+          result=$(jq -r '.result // empty' /tmp/security.json)
+          trimmed="$(printf '%s' "$result" | tr -d '[:space:]')"
+          if [ -z "$result" ] || [ "$result" = "null" ] || [ -z "$trimmed" ]; then
+            echo "::error::security review produced no usable .result (empty, null, or whitespace-only) — failing the security gate closed"
+            exit 1
+          fi
+
+          printf '%s\n' "$result" | tee /tmp/security.md
+
+      - name: บล็อกเมื่อเจอ HIGH หรือ CRITICAL
+        run: |
+          if grep -qE '^(HIGH|CRITICAL)' /tmp/security.md; then
+            echo "::error::security review พบช่องโหว่ระดับ HIGH ขึ้นไป — merge ไม่ได้"
+            exit 1
+          fi
+          echo "ไม่พบช่องโหว่ระดับ HIGH ขึ้นไป"
