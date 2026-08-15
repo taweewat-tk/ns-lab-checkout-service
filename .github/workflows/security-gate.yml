@@ -3,6 +3,11 @@ on:
   pull_request:
     types: [opened, synchronize]
 
+# ไม่มีเพดานค่าใช้จ่ายต่อรอบแล้ว จึงกันไม่ให้ push รัว ๆ จุดสแกนซ้อนกันหลายรอบพร้อมกัน
+concurrency:
+  group: security-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -28,11 +33,15 @@ jobs:
         run: |
           set -o pipefail
 
-          # Fail closed if the model invocation itself errors (network, auth, budget, etc.)
+          # Fail closed if the model invocation itself errors (network, auth, etc.)
           if ! claude -p "ตรวจความปลอดภัยของ repo นี้ รายงานเฉพาะของที่ยืนยันได้ ขึ้นต้นแต่ละข้อด้วย CRITICAL/HIGH/MEDIUM/LOW แล้วตามด้วยไฟล์:บรรทัด" \
-            --output-format json \
-            --max-budget-usd 0.50 > /tmp/security.json; then
+            --output-format json > /tmp/security.json; then
             echo "::error::claude -p invocation failed (non-zero exit) — failing the security gate closed"
+            # ข้อความข้างบนไม่บอกว่าพังเพราะอะไร สาเหตุจริงอยู่ใน JSON ที่ claude
+            # เขียนไว้ก่อนตาย (subtype / errors) — พิมพ์ออกมาให้ debug ได้จาก log เลย
+            echo "--- /tmp/security.json ---"
+            jq -r '{subtype, terminal_reason, errors, total_cost_usd, num_turns}' /tmp/security.json 2>/dev/null \
+              || head -c 2000 /tmp/security.json
             exit 1
           fi
 
